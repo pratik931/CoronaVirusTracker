@@ -10,6 +10,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import javax.annotation.PostConstruct;
 
@@ -32,29 +34,40 @@ public class CoronaVirusDataService {
 	}
 
 	@PostConstruct
-	@Scheduled(cron = "* * 1 * * *")
+	@Scheduled(cron = "* 1 * * * *")
 	public void fetchVirusData() throws IOException, InterruptedException {
-		List<LocationStats> newStats = new ArrayList<LocationStats>();
+		
 		HttpClient client = HttpClient.newHttpClient();
 		HttpRequest request = HttpRequest.newBuilder()
 				.uri(URI.create(VIRUS_DATA_URL)).build();
 		HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 		
+		loadVirusData(response);
+	}
+
+	public void loadVirusData(HttpResponse<String> response) throws IOException {
+		List<LocationStats> newStats = new ArrayList<LocationStats>();
 		StringReader csvBodyReader = new StringReader(response.body());
 		
 		Iterable<CSVRecord> records = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(csvBodyReader);
 		for (CSVRecord record : records) {
-			LocationStats locationStat = new LocationStats();
-		    locationStat.setState(record.get("Province/State"));
-		    locationStat.setCountry(record.get("Country/Region"));
-		    int totalCases = Integer.parseInt(record.get(record.size() - 1));
-		    int totalCasesFromPrevDay = Integer.parseInt(record.get(record.size() - 2));
-		    locationStat.setLatestTotalCases(totalCases);
-		    locationStat.setDiffFromPrevDay(totalCases - totalCasesFromPrevDay);
-
+			LocationStats locationStat = addVirusDataToModel(record);
 		    newStats.add(locationStat);
 		}
+	
+		
 		this.allStats = newStats;
+	}
+
+	public LocationStats addVirusDataToModel(CSVRecord record) {
+		LocationStats locationStat = new LocationStats();
+		locationStat.setState(record.get("Province/State"));
+		locationStat.setCountry(record.get("Country/Region"));
+		int totalCases = Integer.parseInt(record.get(record.size() - 1));
+		int totalCasesFromPrevDay = Integer.parseInt(record.get(record.size() - 2));
+		locationStat.setLatestTotalCases(totalCases);
+		locationStat.setDiffFromPrevDay(totalCases - totalCasesFromPrevDay);
+		return locationStat;
 	}
 
 }
